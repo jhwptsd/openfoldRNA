@@ -120,7 +120,7 @@ class AlphaFold(nn.Module):
             self.extra_msa_stack = ExtraMSAStack(
                 **self.extra_msa_config["extra_msa_stack"],
             )
-
+        
         self.evoformer = EvoformerStack(
             **self.config["evoformer_stack"],
         )

@@ -172,7 +172,7 @@ def list_files_with_extensions(dir, extensions):
     return [f for f in os.listdir(dir) if f.endswith(extensions)]
 
 
-def main(args):
+def main(args, seqs=None):
     # Create the output directory
     os.makedirs(args.output_dir, exist_ok=True)
 
@@ -248,26 +248,40 @@ def main(args):
 
     tag_list = []
     seq_list = []
-    for fasta_file in list_files_with_extensions(args.fasta_dir, (".fasta", ".fa")):
-        # Gather input sequences
-        fasta_path = os.path.join(args.fasta_dir, fasta_file)
-        with open(fasta_path, "r") as fp:
-            data = fp.read()
+    
+    # Handle if sequences are in FASTA form
+    if seqs==None or args.fasta_dir!=None:
+        for fasta_file in list_files_with_extensions(args.fasta_dir, (".fasta", ".fa")):
+            # Gather input sequences
+            fasta_path = os.path.join(args.fasta_dir, fasta_file)
+            with open(fasta_path, "r") as fp:
+                data = fp.read()
 
-        tags, seqs = parse_fasta(data)
+            tags, seqs = parse_fasta(data)
 
-        if not is_multimer and len(tags) != 1:
-            print(
-                f"{fasta_path} contains more than one sequence but "
-                f"multimer mode is not enabled. Skipping..."
-            )
-            continue
+            if not is_multimer and len(tags) != 1:
+                print(
+                    f"{fasta_path} contains more than one sequence but "
+                    f"multimer mode is not enabled. Skipping..."
+                )
+                continue
 
-        # assert len(tags) == len(set(tags)), "All FASTA tags must be unique"
-        tag = '-'.join(tags)
+            # assert len(tags) == len(set(tags)), "All FASTA tags must be unique"
+            tag = '-'.join(tags)
 
-        tag_list.append((tag, tags))
-        seq_list.append(seqs)
+            tag_list.append((tag, tags))
+            seq_list.append(seqs)
+            
+    # Handle if sequences are directly inputted
+    else:
+        for i in seqs:
+            if not is_multimer and len(seqs)>1:
+                print(
+                    f"Sequence contains more than one sequence but "
+                    f"multimer mode is not enabled. Skipping..."
+                )
+            tag_list.append((i,i))
+            seq_list.append(seqs[i])
 
     seq_sort_fn = lambda target: sum([len(s) for s in target[1]])
     sorted_targets = sorted(zip(tag_list, seq_list), key=seq_sort_fn)
@@ -387,11 +401,11 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "fasta_dir", type=str,
+        "fasta_dir", type=str, default=None,
         help="Path to directory containing FASTA files, one sequence per file"
     )
     parser.add_argument(
-        "template_mmcif_dir", type=str,
+        "template_mmcif_dir", type=str, default="\\"
     )
     parser.add_argument(
         "--use_precomputed_alignments", type=str, default=None,
@@ -416,7 +430,7 @@ if __name__ == "__main__":
              device name is accepted (e.g. "cpu", "cuda:0")"""
     )
     parser.add_argument(
-        "--config_preset", type=str, default="model_1",
+        "--config_preset", type=str, default="model_1_ptm",
         help="""Name of a model config preset defined in openfold/config.py"""
     )
     parser.add_argument(
@@ -497,3 +511,4 @@ if __name__ == "__main__":
             --model_device for better performance"""
         )
     main(args)
+    
