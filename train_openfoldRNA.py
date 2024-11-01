@@ -3,7 +3,7 @@ import logging
 import os
 
 from Converter import Converter
-from run_pretrained_openfold import main
+#from run_pretrained_openfold import main
 from parse_json import parse_json
 from scripts.utils import add_data_args
 
@@ -11,6 +11,9 @@ import torch
 import torch.nn as nn
 import math
 import numpy as np
+
+import warnings
+warnings.filterwarnings('ignore')
 
 # Index to amino acid dictionary
 # Largely arbitrary, but must stay consistent for any given converter
@@ -65,15 +68,17 @@ def encode_rna(seq):
             
     return out
 
-def train(args, epochs=50, batch_size=1, c=None):
+def train(args, epochs=50, batch_size=32, c=None): # I don't want to deal with imhomogenous np arrays
+                                                   # So instead here's a really convoluted batching function
     # Set up converter
     if c is None:
         conv = Converter(max_seq_len=max_len)
     else:
         conv = c
-    
+
     for _ in range(epochs):
-        for batch in batch_data(seqs, batch_size):
+        counter = 1
+        for batch in batch_data(seqs, 1):
             
             # batch: ([(tag, seq), (tag, seq),...])
             
@@ -97,23 +102,30 @@ def train(args, epochs=50, batch_size=1, c=None):
             for i in range(len(tags)):
                 final_seqs[tags[i]] = aa_seqs[i]
             
-            # LAYER 2: FOLDING
-            main(args, final_seqs)
-            
-            output_dir = args.output_dir
+            print(final_seqs)
             return
+            
+            # LAYER 2: FOLDING
+            # main(args, final_seqs)
+            
+            # output_dir = args.output_dir
         
             # LAYER 3: SUBSTITUTION
 
+            counter += 1
+            
+            if counter==batch_size:
+                # BACKPROPAGATION
+                pass
             
 if __name__=="__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "fasta_dir", type=str, default=None,
+        "fasta_dir", type=str,
         help="Path to directory containing FASTA files, one sequence per file"
     )
     parser.add_argument(
-        "template_mmcif_dir", type=str, default="\\",
+        "template_mmcif_dir", type=str,
     )
     parser.add_argument(
         "--use_precomputed_alignments", type=str, default=None,
