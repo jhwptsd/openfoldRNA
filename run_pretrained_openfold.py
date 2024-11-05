@@ -172,7 +172,7 @@ def list_files_with_extensions(dir, extensions):
     return [f for f in os.listdir(dir) if f.endswith(extensions)]
 
 
-def main(args, seqs=None):
+def main(args, seqs=None, save=False):
     # Create the output directory
     os.makedirs(args.output_dir, exist_ok=True)
 
@@ -367,6 +367,8 @@ def main(args, seqs=None):
                 args.subtract_plddt
             )
 
+            
+            
             unrelaxed_file_suffix = "_unrelaxed.pdb"
             if args.cif_output:
                 unrelaxed_file_suffix = "_unrelaxed.cif"
@@ -385,8 +387,12 @@ def main(args, seqs=None):
             if not args.skip_relaxation:
                 # Relax the prediction.
                 logger.info(f"Running relaxation on {unrelaxed_output_path}...")
-                relax_protein(config, args.model_device, unrelaxed_protein, output_directory, output_name,
-                              args.cif_output)
+                if not save:
+                    return relax_protein(config, args.model_device, unrelaxed_protein, output_directory, output_name,
+                                args.cif_output, save=save)
+                else:
+                    relax_protein(config, args.model_device, unrelaxed_protein, output_directory, output_name,
+                                args.cif_output, save=False)
 
             if args.save_outputs:
                 output_dict_path = os.path.join(

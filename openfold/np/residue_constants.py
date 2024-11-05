@@ -26,7 +26,8 @@ import tree
 
 
 # Distance from one CA to next CA [trans configuration: omega = 180].
-ca_ca = 3.80209737096
+#ca_ca = 3.80209737096
+ca_ca = 6.0
 
 # Format: The list for each AA type contains chi1, chi2, chi3, chi4 in
 # this order (or a relevant subset from chi1 onwards). ALA and GLY don't have
@@ -544,8 +545,10 @@ def load_stereo_chemical_props() -> Tuple[
 
 # Between-residue bond lengths for general bonds (first element) and for Proline
 # (second element).
-between_res_bond_length_c_n = [1.329, 1.341]
-between_res_bond_length_stddev_c_n = [0.014, 0.016]
+#between_res_bond_length_c_n = [1.329, 1.341]
+between_res_bond_length_c_n = [3.31, 3.31]
+#between_res_bond_length_stddev_c_n = [0.014, 0.016]
+between_res_bond_length_stddev_c_n = [0.0, 0.0]
 
 # Between-residue cos_angles.
 between_res_cos_angles_c_n_ca = [-0.5203, 0.0353]  # degrees: 121.352 +- 2.315

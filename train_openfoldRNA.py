@@ -3,7 +3,9 @@ import logging
 import os
 
 from Converter import Converter
-#from run_pretrained_openfold import main
+from run_pretrained_openfold import main
+from compare import protein_to_rna, rna_to_rna
+
 from parse_json import parse_json
 from scripts.utils import add_data_args
 
@@ -68,7 +70,10 @@ def encode_rna(seq):
             
     return out
 
-def train(args, epochs=50, batch_size=32, c=None): # I don't want to deal with imhomogenous np arrays
+def get_structure(tag):
+    pass
+
+def train(args, epochs=50, batch_size=32, c=None, substitute=True, tm_score=False): # I don't want to deal with imhomogenous np arrays
                                                    # So instead here's a really convoluted batching function
     # Set up converter
     if c is None:
@@ -76,10 +81,12 @@ def train(args, epochs=50, batch_size=32, c=None): # I don't want to deal with i
     else:
         conv = c
 
+
+    optimizer = torch.optim.Adam(conv.parameters(), lr=1e-3)
+    
     for _ in range(epochs):
-        counter = 1
         for batch in batch_data(seqs, 1):
-            
+            optimizer.zero_grad()
             # batch: ([(tag, seq), (tag, seq),...])
             
             # LAYER 1: RNA-AMINO CONVERSION
@@ -102,21 +109,20 @@ def train(args, epochs=50, batch_size=32, c=None): # I don't want to deal with i
             for i in range(len(tags)):
                 final_seqs[tags[i]] = aa_seqs[i]
             
-            print(final_seqs)
-            return
-            
             # LAYER 2: FOLDING
-            # main(args, final_seqs)
+            out_prot = main(args, final_seqs)
             
-            # output_dir = args.output_dir
-        
-            # LAYER 3: SUBSTITUTION
-
-            counter += 1
-            
-            if counter==batch_size:
-                # BACKPROPAGATION
+            loss = 0
+            if substitute:
+                # LAYER 3: SUBSTITUTION
                 pass
+                loss = protein_to_rna(out_prot, get_structure(final_seqs.keys[0]), tm_score)
+            else:
+                loss = rna_to_rna(out_prot, get_structure(final_seqs.keys[0]), tm_score)
+
+            loss = torch.Tensor(loss)
+            loss.backward()
+            optimizer.step()
             
 if __name__=="__main__":
     parser = argparse.ArgumentParser()

@@ -229,7 +229,7 @@ def prep_output(out, batch, feature_dict, feature_processor, config_preset, mult
     return unrelaxed_protein
 
 
-def relax_protein(config, model_device, unrelaxed_protein, output_directory, output_name, cif_output=False):
+def relax_protein(config, model_device, unrelaxed_protein, output_directory, output_name, cif_output=False, save=False):
     amber_relaxer = relax.AmberRelaxation(
         use_gpu=(model_device != "cpu"),
         **config.relax,
@@ -242,20 +242,24 @@ def relax_protein(config, model_device, unrelaxed_protein, output_directory, out
         os.environ["CUDA_VISIBLE_DEVICES"] = device_no
     # the struct_str will contain either a PDB-format or a ModelCIF format string
     struct_str, _, _ = amber_relaxer.process(prot=unrelaxed_protein, cif_output=cif_output)
-    os.environ["CUDA_VISIBLE_DEVICES"] = visible_devices
-    relaxation_time = time.perf_counter() - t
+    
+    if not save:
+        return struct_str
+    else:
+        os.environ["CUDA_VISIBLE_DEVICES"] = visible_devices
+        relaxation_time = time.perf_counter() - t
 
-    logger.info(f"Relaxation time: {relaxation_time}")
-    update_timings({"relaxation": relaxation_time}, os.path.join(output_directory, "timings.json"))
+        logger.info(f"Relaxation time: {relaxation_time}")
+        update_timings({"relaxation": relaxation_time}, os.path.join(output_directory, "timings.json"))
 
-    # Save the relaxed PDB.
-    suffix = "_relaxed.pdb"
-    if cif_output:
-        suffix = "_relaxed.cif"
-    relaxed_output_path = os.path.join(
-        output_directory, f'{output_name}{suffix}'
-    )
-    with open(relaxed_output_path, 'w') as fp:
-        fp.write(struct_str)
+        # Save the relaxed PDB.
+        suffix = "_relaxed.pdb"
+        if cif_output:
+            suffix = "_relaxed.cif"
+        relaxed_output_path = os.path.join(
+            output_directory, f'{output_name}{suffix}'
+        )
+        with open(relaxed_output_path, 'w') as fp:
+            fp.write(struct_str)
 
-    logger.info(f"Relaxed output written to {relaxed_output_path}...")
+        logger.info(f"Relaxed output written to {relaxed_output_path}...")
