@@ -250,7 +250,7 @@ def main(args, seqs=None, save=False):
     seq_list = []
     
     # Handle if sequences are in FASTA form
-    if seqs==None or args.fasta_dir!=None:
+    if seqs==None:
         for fasta_file in list_files_with_extensions(args.fasta_dir, (".fasta", ".fa")):
             # Gather input sequences
             fasta_path = os.path.join(args.fasta_dir, fasta_file)
@@ -274,14 +274,14 @@ def main(args, seqs=None, save=False):
             
     # Handle if sequences are directly inputted
     else:
-        for i in seqs:
+        for tag, seq in zip(seqs.keys(), seqs.items()):
             if not is_multimer and len(seqs)>1:
                 print(
                     f"Sequence contains more than one sequence but "
                     f"multimer mode is not enabled. Skipping..."
                 )
-            tag_list.append((i,i))
-            seq_list.append(seqs[i])
+            tag_list.append((tag,[tag]))
+            seq_list.append(seq)
 
     seq_sort_fn = lambda target: sum([len(s) for s in target[1]])
     sorted_targets = sorted(zip(tag_list, seq_list), key=seq_sort_fn)

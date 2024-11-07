@@ -1,8 +1,8 @@
 from parse_protein import *
 import random
 
-def substitute(rna, path_in):#, path_out):
-    points, norms = parse_protein(path_in)
+def substitute(rna, protein):#, path_out):
+    points, norms = parse_protein(protein)
     out = ""
     length = 1
     for i in range(len(rna)):

@@ -73,15 +73,15 @@ def encode_rna(seq):
 def get_structure(tag):
     pass
 
-def train(args, epochs=50, batch_size=32, c=None, substitute=True, tm_score=False): # I don't want to deal with imhomogenous np arrays
-                                                   # So instead here's a really convoluted batching function
+def train(args, epochs=50, batch_size=32, c=None, substitute=False, tm_score=False, save_path="bin\converter.pt"): # I don't want to deal with imhomogenous np arrays
+                                                                                    # So I'm just not doing batching yet; may implement if necessary/possible
     # Set up converter
     if c is None:
         conv = Converter(max_seq_len=max_len)
     else:
         conv = c
 
-
+    conv.train()
     optimizer = torch.optim.Adam(conv.parameters(), lr=1e-3)
     
     for _ in range(epochs):
@@ -109,20 +109,27 @@ def train(args, epochs=50, batch_size=32, c=None, substitute=True, tm_score=Fals
             for i in range(len(tags)):
                 final_seqs[tags[i]] = aa_seqs[i]
             
+            ###################################
+#           PROGRAM IS KNOWN TO WORK UNTIL HERE
+            ###################################
+            
             # LAYER 2: FOLDING
-            out_prot = main(args, final_seqs)
+            out_prot = main(args, final_seqs, save=False)
             
             loss = 0
-            if substitute:
-                # LAYER 3: SUBSTITUTION
-                pass
+            if not substitute:
                 loss = protein_to_rna(out_prot, get_structure(final_seqs.keys[0]), tm_score)
             else:
+                # LAYER 3: SUBSTITUTION
+                pass # May not be necessary - I'll begin testing without the substitution layer.
                 loss = rna_to_rna(out_prot, get_structure(final_seqs.keys[0]), tm_score)
 
             loss = torch.Tensor(loss)
             loss.backward()
             optimizer.step()
+    
+    torch.save(conv.state_dict(), save_path)
+    
             
 if __name__=="__main__":
     parser = argparse.ArgumentParser()
