@@ -1,5 +1,5 @@
 # OpenFoldRNA [WIP]
-A novel approach to RNA folding with OpenFold
+A novel approach to RNA folding with OpenFold.
 
 # Documentation
 So far, OpenFoldRNA uses the same documentation as [OpenFold](https://github.com/aqlaboratory/openfold). Follow the same installation and setup instructions there.

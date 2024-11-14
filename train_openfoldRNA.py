@@ -45,9 +45,15 @@ AA_DICT = {
 max_len = 150
 
 seqs = {}
+components = []
+macro_tags = []
+
+seq_path = "test_RNA.json"
+struct_path = ""
+
 def load_data(path):
-    seqs=parse_json(path, max_len=max_len)
-    return seqs
+    seqs, components, macro_tags=parse_json(path, max_len=max_len)
+    return seqs, components, macro_tags
 
 def batch_data(iterable, n=1):
     l = len(iterable)
@@ -70,8 +76,24 @@ def encode_rna(seq):
             
     return out
 
-def get_structure(tag):
-    pass
+def get_structure(tag, path=struct_path):
+    # Return the structure of an RNA molecule given its tag and the path to its structure file
+    # File directory:
+    # root
+    #  -- openfoldRNA.dir
+    #  -- train_openfoldRNA.py
+    #  -- data.dir
+    #  ---- component 1.dir
+    #  ------ tag 1.dir
+    #  -------- tag 1a.cif
+    #  -------- tag 1b.cif
+    # ...
+    index = list(seqs.keys()).index(tag)
+    component = components[index]
+    macro_tag = macro_tags[index]
+    
+    path = f"{path}\{component}\{macro_tag}\{tag}.cif"
+    return path
 
 def train(args, epochs=50, batch_size=32, c=None, substitute=False, tm_score=False, save_path="bin\converter.pt"): # I don't want to deal with imhomogenous np arrays
                                                                                     # So I'm just not doing batching yet; may implement if necessary/possible
@@ -91,6 +113,11 @@ def train(args, epochs=50, batch_size=32, c=None, substitute=False, tm_score=Fal
             
             # LAYER 1: RNA-AMINO CONVERSION
             tags = [s[0] for s in batch]
+            try:
+                struct = get_structure(tags[0])
+            except:
+                continue
+            
             
             processed_seqs = np.array([encode_rna(s[1]) for s in batch]) # (batch, seq, base)
             processed_seqs = np.transpose(processed_seqs, (1,0,2)) # (seq, batch, base)
@@ -118,11 +145,11 @@ def train(args, epochs=50, batch_size=32, c=None, substitute=False, tm_score=Fal
             
             loss = 0
             if not substitute:
-                loss = protein_to_rna(out_prot, get_structure(final_seqs.keys[0]), tm_score)
+                loss = protein_to_rna(out_prot, struct, tm_score)
             else:
                 # LAYER 3: SUBSTITUTION
                 pass # May not be necessary - I'll begin testing without the substitution layer.
-                loss = rna_to_rna(out_prot, get_structure(final_seqs.keys[0]), tm_score)
+                loss = rna_to_rna(out_prot, get_structure(struct), tm_score)
 
             loss = torch.Tensor(loss)
             loss.backward()
@@ -244,6 +271,6 @@ if __name__=="__main__":
             --model_device for better performance"""
         )
     
-    seqs = load_data("test_RNA.json")
+    seqs, components, macro_tags = load_data(seq_path)
     train(args=args)
     
