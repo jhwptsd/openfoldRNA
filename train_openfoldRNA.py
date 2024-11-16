@@ -4,7 +4,7 @@ import os
 import os.path
 
 from Converter import Converter
-#from run_pretrained_openfold import main
+from run_pretrained_openfold import main
 from compare import protein_to_rna, rna_to_rna
 
 from parse_json import parse_json
