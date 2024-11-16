@@ -1,9 +1,10 @@
 import argparse
 import logging
 import os
+import os.path
 
 from Converter import Converter
-from run_pretrained_openfold import main
+#from run_pretrained_openfold import main
 from compare import protein_to_rna, rna_to_rna
 
 from parse_json import parse_json
@@ -57,7 +58,7 @@ def load_data(path):
 
 def batch_data(iterable, n=1):
     l = len(iterable)
-    iter = [(t, s) for t, s in iterable.items()]
+    iter = [(t, s) for t, s in list(iterable.items())]
     for ndx in range(0, l, n):
         yield iter[ndx:min(ndx + n, l)]
 
@@ -95,8 +96,10 @@ def get_structure(tag, path=struct_path):
     path = f"{path}\{component}\{macro_tag}\{tag}.cif"
     return path
 
-def train(args, epochs=50, batch_size=32, c=None, substitute=False, tm_score=False, save_path="bin\converter.pt"): # I don't want to deal with imhomogenous np arrays
-                                                                                    # So I'm just not doing batching yet; may implement if necessary/possible
+def train(args, epochs=50, batch_size=32, 
+          c=None, substitute=False, tm_score=False, 
+          save_path="bin\converter.pt"):
+    
     # Set up converter
     if c is None:
         conv = Converter(max_seq_len=max_len)
@@ -107,51 +110,50 @@ def train(args, epochs=50, batch_size=32, c=None, substitute=False, tm_score=Fal
     optimizer = torch.optim.Adam(conv.parameters(), lr=1e-3)
     
     for _ in range(epochs):
-        for batch in batch_data(seqs, 1):
+        for batch in batch_data(seqs, batch_size):
             optimizer.zero_grad()
             # batch: ([(tag, seq), (tag, seq),...])
             
             # LAYER 1: RNA-AMINO CONVERSION
             tags = [s[0] for s in batch]
-            try:
-                struct = get_structure(tags[0])
-            except:
-                continue
+            structs = [get_structure(tags[i]) for i in range(len(tags))]
             
+            # Check that structure files exist
+            # if not os.path.isfile(get_structure(tags[0])):
+            #     continue
             
-            processed_seqs = np.array([encode_rna(s[1]) for s in batch]) # (batch, seq, base)
-            processed_seqs = np.transpose(processed_seqs, (1,0,2)) # (seq, batch, base)
-            processed_seqs = torch.Tensor(processed_seqs)
-            aa_seqs = conv(processed_seqs) # (seq, batch, aa)
-
+            processed_seqs = [torch.Tensor(np.transpose(np.array(encode_rna(s[1])), (0,1))) for s in batch] # (batch, seq, base)
+            aa_seqs = [conv(s) for s in processed_seqs][0] # (seq, batch, aa)
             temp = []
             
+            
             # Reconvert to letter representation
-            for i in range(len(aa_seqs[0])):
-                    temp.append(''.join(AA_DICT[j[i]] for j in aa_seqs))
+            for i in range(len(aa_seqs)):
+                temp.append(''.join([AA_DICT[n] for n in aa_seqs[i]]))
                     
             aa_seqs = temp # (seq: String, batch)
-            
+
             final_seqs = {} # {tag: seq}
             for i in range(len(tags)):
                 final_seqs[tags[i]] = aa_seqs[i]
-            
+                
             ###################################
 #           PROGRAM IS KNOWN TO WORK UNTIL HERE
             ###################################
             
             # LAYER 2: FOLDING
-            out_prot = main(args, final_seqs, save=False)
-            
-            loss = 0
-            if not substitute:
-                loss = protein_to_rna(out_prot, struct, tm_score)
-            else:
-                # LAYER 3: SUBSTITUTION
-                pass # May not be necessary - I'll begin testing without the substitution layer.
-                loss = rna_to_rna(out_prot, get_structure(struct), tm_score)
+            loss = np.array([])
+            for i in range(len(final_seqs)):
+                out_prot = main(args, final_seqs.values()[i], save=False)
+                
+                if not substitute:
+                    loss = protein_to_rna(out_prot, structs[i], tm_score)
+                else:
+                    # LAYER 3: SUBSTITUTION
+                    pass # May not be necessary - I'll begin testing without the substitution layer.
+                    loss = rna_to_rna(out_prot, get_structure(structs[i]), tm_score)
 
-            loss = torch.Tensor(loss)
+            loss = torch.Tensor(np.mean(loss))
             loss.backward()
             optimizer.step()
     

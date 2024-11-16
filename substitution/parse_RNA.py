@@ -1,9 +1,11 @@
 import sys
-from Monomer import *
+from substitution.Monomer import *
 from gemmi import *
 from openfold.np import protein
 from openfold.np.protein import to_modelcif
 import numpy as np
+import torch
+
 
 def parse_rna(path):
     try:
@@ -35,7 +37,7 @@ def parse_rna(path):
                 norms.append(np.cross(v1, v2))
                 angle_points = []
         
-        return points, norms
+        return torch.Tensor(points), torch.Tensor(norms)
             
     except Exception as e:
         print("Oops. %s" % e)
