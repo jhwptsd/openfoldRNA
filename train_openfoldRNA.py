@@ -205,7 +205,7 @@ def predict(seq, save):
                                 long_sequence_inference=False, 
                                 use_deepspeed_evoformer_attention=True)
         template_featurizer = templates.HhsearchHitFeaturizer(
-            mmcif_dir=None,
+            mmcif_dir="templates\\",
             max_template_date="9999-21-31",
             max_hits=config.data.predict.max_templates,
             kalign_binary_path=None,
