@@ -58,36 +58,63 @@ from scripts.utils import add_data_args
 TRACING_INTERVAL = 50
 
 
-def precompute_alignments(tags, seqs, alignment_dir, output_dir, logger):
+def precompute_alignments(tags, seqs, alignment_dir, args):
     for tag, seq in zip(tags, seqs):
-        tmp_fasta_path = os.path.join(output_dir, f"tmp_{os.getpid()}.fasta")
+        tmp_fasta_path = os.path.join(args.output_dir, f"tmp_{os.getpid()}.fasta")
         with open(tmp_fasta_path, "w") as fp:
             fp.write(f">{tag}\n{seq}")
 
         local_alignment_dir = os.path.join(alignment_dir, tag)
-        
-        logger.info(f"Generating alignments for {tag}...")
 
-        os.makedirs(local_alignment_dir, exist_ok=True)
+        if args.use_precomputed_alignments is None:
+            logger.info(f"Generating alignments for {tag}...")
 
-        template_searcher = hhsearch.HHSearch(
-            binary_path=args.hhsearch_binary_path,
-            databases=[args.pdb70_database_path],
-        )
+            os.makedirs(local_alignment_dir, exist_ok=True)
 
-        # In seqemb mode, use AlignmentRunner only to generate templates
-        alignment_runner = data_pipeline.AlignmentRunner(
-            jackhmmer_binary_path=None,
-            uniref90_database_path=None,
-            template_searcher=template_searcher,
-            no_cpus=args.cpus,
-        )
-        embedding_generator = EmbeddingGenerator()
-        embedding_generator.run(tmp_fasta_path, alignment_dir)
+            if "multimer" in args.config_preset:
+                template_searcher = hmmsearch.Hmmsearch(
+                    binary_path=args.hmmsearch_binary_path,
+                    hmmbuild_binary_path=args.hmmbuild_binary_path,
+                    database_path=args.pdb_seqres_database_path,
+                )
+            else:
+                template_searcher = hhsearch.HHSearch(
+                    binary_path=args.hhsearch_binary_path,
+                    databases=[args.pdb70_database_path],
+                )
 
-        alignment_runner.run(
-            tmp_fasta_path, local_alignment_dir
-        )
+            # In seqemb mode, use AlignmentRunner only to generate templates
+            if args.use_single_seq_mode:
+                alignment_runner = data_pipeline.AlignmentRunner(
+                    jackhmmer_binary_path=args.jackhmmer_binary_path,
+                    uniref90_database_path=args.uniref90_database_path,
+                    template_searcher=template_searcher,
+                    no_cpus=args.cpus,
+                )
+                embedding_generator = EmbeddingGenerator()
+                embedding_generator.run(tmp_fasta_path, alignment_dir)
+            else:
+                alignment_runner = data_pipeline.AlignmentRunner(
+                    jackhmmer_binary_path=args.jackhmmer_binary_path,
+                    hhblits_binary_path=args.hhblits_binary_path,
+                    uniref90_database_path=args.uniref90_database_path,
+                    mgnify_database_path=args.mgnify_database_path,
+                    bfd_database_path=args.bfd_database_path,
+                    uniref30_database_path=args.uniref30_database_path,
+                    uniclust30_database_path=args.uniclust30_database_path,
+                    uniprot_database_path=args.uniprot_database_path,
+                    template_searcher=template_searcher,
+                    use_small_bfd=args.bfd_database_path is None,
+                    no_cpus=args.cpus
+                )
+
+            alignment_runner.run(
+                tmp_fasta_path, local_alignment_dir
+            )
+        else:
+            logger.info(
+                f"Using precomputed alignments for {tag} at {alignment_dir}..."
+            )
 
         # Remove temporary FASTA file
         os.remove(tmp_fasta_path)
@@ -102,11 +129,19 @@ def generate_feature_dict(
     seqs,
     alignment_dir,
     data_processor,
-    output_dir
+    args,
 ):
-    tmp_fasta_path = os.path.join(output_dir, f"tmp_{os.getpid()}.fasta")
+    tmp_fasta_path = os.path.join(args.output_dir, f"tmp_{os.getpid()}.fasta")
 
-    if len(seqs) == 1:
+    if "multimer" in args.config_preset:
+        with open(tmp_fasta_path, "w") as fp:
+            fp.write(
+                '\n'.join([f">{tag}\n{seq}" for tag, seq in zip(tags, seqs)])
+            )
+        feature_dict = data_processor.process_fasta(
+            fasta_path=tmp_fasta_path, alignment_dir=alignment_dir,
+        )
+    elif len(seqs) == 1:
         tag = tags[0]
         seq = seqs[0]
         with open(tmp_fasta_path, "w") as fp:
@@ -116,7 +151,7 @@ def generate_feature_dict(
         feature_dict = data_processor.process_fasta(
             fasta_path=tmp_fasta_path,
             alignment_dir=local_alignment_dir,
-            seqemb_mode=True,
+            seqemb_mode=args.use_single_seq_mode,
         )
     else:
         with open(tmp_fasta_path, "w") as fp:

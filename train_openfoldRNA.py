@@ -3,42 +3,21 @@ import logging
 import os
 import os.path
 
-logging.basicConfig()
-logger = logging.getLogger(__file__)
-logger.setLevel(level=logging.INFO)
-
 from Converter import Converter
-from run_pretrained_openfold import (precompute_alignments, round_up_seqlen,
-                                    generate_feature_dict, list_files_with_extensions)
+from run_pretrained_openfold import main
 from protein_to_rna import protein_to_rna
 from rna_to_rna import rna_to_rna
 
 from parse_json import parse_json
+from scripts.utils import add_data_args
 
 import torch
 import torch.nn as nn
 import math
 import numpy as np
-import random
-import time
 
 import warnings
 warnings.filterwarnings('ignore')
-
-from openfold.config import model_config
-from openfold.data import templates, feature_pipeline, data_pipeline
-from openfold.data.tools import hhsearch, hmmsearch
-from openfold.np import protein
-from openfold.utils.script_utils import (load_models_from_command_line, parse_fasta, run_model,
-                                         prep_output, relax_protein)
-from openfold.utils.tensor_utils import tensor_tree_map
-from openfold.utils.trace_utils import (
-    pad_feature_dict_seq,
-    trace_model_,
-)
-
-from scripts.precompute_embeddings import EmbeddingGenerator
-from scripts.utils import add_data_args
 
 # Index to amino acid dictionary
 # Largely arbitrary, but must stay consistent for any given converter
@@ -118,7 +97,7 @@ def get_structure(tag, path=struct_path):
     path = f"{path}\{component}\{macro_tag}\{tag}.cif"
     return path
 
-def train(epochs=50, batch_size=32, 
+def train(args, epochs=50, batch_size=32, 
           c=None, substitute=False, tm_score=False, 
           save_path="bin\converter.pt"):
     
@@ -166,7 +145,7 @@ def train(epochs=50, batch_size=32,
             # LAYER 2: FOLDING
             loss = np.array([])
             for i in range(len(final_seqs)):
-                out_prot = predict(final_seqs.values()[i], save=False)
+                out_prot = main(args, final_seqs.values()[i], save=False)
                 
                 if not substitute:
                     loss = protein_to_rna(out_prot, structs[i], tm_score)
@@ -181,110 +160,120 @@ def train(epochs=50, batch_size=32,
     
     torch.save(conv.state_dict(), save_path)
     
-def predict(seq, save):
-        # Replicate main() from run_pretrained_openfold.py but without all of the nonsense
-        if save:
-            os.makedirs("\\folds", exist_ok=True)
-        config = model_config("model_1_ptm", 
-                                long_sequence_inference=False, 
-                                use_deepspeed_evoformer_attention=True)
-        template_featurizer = templates.HhsearchHitFeaturizer(
-            mmcif_dir="",
-            max_template_date="9999-21-31",
-            max_hits=config.data.predict_templates,
-            kalign_binary_path=None,
-            release_dates_path=None,
-            obsolete_pdbs_path=None,
-        )
-        data_processor = data_pipeline.DataPipeline(
-            template_featurizer=template_featurizer
-        )
-        random_seed = random.randrange(2**32)
-        np.random.seed(random_seed)
-        torch.manual_seed(random_seed + 1)
-        feature_processor = feature_pipeline.FeaturePipeline(config.data)
-        alignment_dir = os.path.join("\\folds", "alignments")
-        
-        tag_list = []
-        seq_list = []
-        
-        for tag, seq in zip(seqs.keys(), seqs.items()):
-                tag_list.append((tag,[tag]))
-                seq_list.append(seq)
-        
-        seq_sort_fn = lambda target: sum([len(s) for s in target[1]])
-        sorted_targets = sorted(zip(tag_list, seq_list), key=seq_sort_fn)
-        feature_dicts = {}
-        
-        model_generator = load_models_from_command_line(
-            config,
-            torch.device(),
-            "openfold\\resources\openfold_soloseq_params\seq_model_esm1b_noptm.pt",
-            None,
-            os.getcwd())
-        
-        for model, output_directory in model_generator:
-            cur_tracing_interval = 0
-            for (tag, tags), seqs in sorted_targets:
-                output_name = f'{tag}_{"model_1_ptm"}'
-
-                # Does nothing if the alignments have already been computed
-                precompute_alignments(tags, seqs, alignment_dir,output_directory,logger)
-
-                feature_dict = feature_dicts.get(tag, None)
-                if feature_dict is None:
-                    feature_dict = generate_feature_dict( ## And this
-                        tags,
-                        seqs,
-                        alignment_dir,
-                        data_processor,
-                        output_directory
-                    )
-                    n = feature_dict["aatype"].shape[-2]
-                    rounded_seqlen = round_up_seqlen(n)
-                    feature_dict = pad_feature_dict_seq(
-                        feature_dict, rounded_seqlen,
-                    )
-
-                    feature_dicts[tag] = feature_dict
-                processed_feature_dict = feature_processor.process_features(
-                    feature_dict, mode='predict', is_multimer=False
-                )
-
-                processed_feature_dict = {
-                    k: torch.as_tensor(v, device=torch.device())
-                    for k, v in processed_feature_dict.items()
-                }
-
-                if rounded_seqlen > cur_tracing_interval:
-                    logger.info(
-                        f"Tracing model at {rounded_seqlen} residues..."
-                    )
-                    t = time.perf_counter()
-                    trace_model_(model, processed_feature_dict)
-                    tracing_time = time.perf_counter() - t
-                    logger.info(
-                        f"Tracing time: {tracing_time}"
-                    )
-                    cur_tracing_interval = rounded_seqlen
-
-                with torch.no_grad():
-                    out = model(processed_feature_dict)
-                    out = tensor_tree_map(lambda t: t[..., -1], out)
-                    out = relax_protein.process_outputs(
-                        out, processed_feature_dict["aatype"], processed_feature_dict["seq_mask"]
-                    )
-                    unrelaxed_protein = relax_protein.to_pdb(out)
-                    if save:
-                        with open(os.path.join(output_directory, f'{output_name}_unrelaxed_model_{cur_tracing_interval}_residues.pdb'), 'w') as f:
-                            f.write(unrelaxed_protein)
-                    else:
-                        return unrelaxed_protein
-                
-        
-        pass
             
 if __name__=="__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "fasta_dir", type=str, default="\\",
+        help="Path to directory containing FASTA files, one sequence per file"
+    )
+    parser.add_argument(
+        "template_mmcif_dir", type=str, default="\\"
+    )
+    parser.add_argument(
+        "--use_precomputed_alignments", type=str, default=None,
+        help="""Path to alignment directory. If provided, alignment computation 
+                is skipped and database path arguments are ignored."""
+    )
+    parser.add_argument(
+        "--use_custom_template", action="store_true", default=False,
+        help="""Use mmcif given with "template_mmcif_dir" argument as template input."""
+    )
+    parser.add_argument(
+        "--use_single_seq_mode", action="store_true", default=False,
+        help="""Use single sequence embeddings instead of MSAs."""
+    )
+    parser.add_argument(
+        "--output_dir", type=str, default=os.getcwd(),
+        help="""Name of the directory in which to output the prediction""",
+    )
+    parser.add_argument(
+        "--model_device", type=str, default="cpu",
+        help="""Name of the device on which to run the model. Any valid torch
+             device name is accepted (e.g. "cpu", "cuda:0")"""
+    )
+    parser.add_argument(
+        "--config_preset", type=str, default="model_1_ptm",
+        help="""Name of a model config preset defined in openfold/config.py"""
+    )
+    parser.add_argument(
+        "--jax_param_path", type=str, default=None,
+        help="""Path to JAX model parameters. If None, and openfold_checkpoint_path
+             is also None, parameters are selected automatically according to 
+             the model name from openfold/resources/params"""
+    )
+    parser.add_argument(
+        "--openfold_checkpoint_path", type=str, default=None,
+        help="""Path to OpenFold checkpoint. Can be either a DeepSpeed 
+             checkpoint directory or a .pt file"""
+    )
+    parser.add_argument(
+        "--save_outputs", action="store_true", default=False,
+        help="Whether to save all model outputs, including embeddings, etc."
+    )
+    parser.add_argument(
+        "--cpus", type=int, default=4,
+        help="""Number of CPUs with which to run alignment tools"""
+    )
+    parser.add_argument(
+        "--preset", type=str, default='full_dbs',
+        choices=('reduced_dbs', 'full_dbs')
+    )
+    parser.add_argument(
+        "--output_postfix", type=str, default=None,
+        help="""Postfix for output prediction filenames"""
+    )
+    parser.add_argument(
+        "--data_random_seed", type=int, default=None
+    )
+    parser.add_argument(
+        "--skip_relaxation", action="store_true", default=False,
+    )
+    parser.add_argument(
+        "--multimer_ri_gap", type=int, default=200,
+        help="""Residue index offset between multiple sequences, if provided"""
+    )
+    parser.add_argument(
+        "--trace_model", action="store_true", default=False,
+        help="""Whether to convert parts of each model to TorchScript.
+                Significantly improves runtime at the cost of lengthy
+                'compilation.' Useful for large batch jobs."""
+    )
+    parser.add_argument(
+        "--subtract_plddt", action="store_true", default=False,
+        help=""""Whether to output (100 - pLDDT) in the B-factor column instead
+                 of the pLDDT itself"""
+    )
+    parser.add_argument(
+        "--long_sequence_inference", action="store_true", default=False,
+        help="""enable options to reduce memory usage at the cost of speed, helps longer sequences fit into GPU memory, see the README for details"""
+    )
+    parser.add_argument(
+        "--cif_output", action="store_true", default=False,
+        help="Output predicted models in ModelCIF format instead of PDB format (default)"
+    )
+    parser.add_argument(
+        "--experiment_config_json", default="", help="Path to a json file with custom config values to overwrite config setting",
+    )
+    parser.add_argument(
+        "--use_deepspeed_evoformer_attention", action="store_true", default=False, 
+        help="Whether to use the DeepSpeed evoformer attention layer. Must have deepspeed installed in the environment.",
+    )
+    add_data_args(parser)
+    args = parser.parse_args()
+
+    if args.jax_param_path is None and args.openfold_checkpoint_path is None:
+        args.jax_param_path = os.path.join(
+            "openfold", "resources", "params",
+            "params_" + args.config_preset + ".npz"
+        )
+
+    if args.model_device == "cpu" and torch.cuda.is_available():
+        logging.warning(
+            """The model is being run on CPU. Consider specifying 
+            --model_device for better performance"""
+        )
+    
     seqs, components, macro_tags = load_data(seq_path)
-    train()
+    train(args=args)
     
