@@ -1,9 +1,7 @@
 import argparse
-import glob
 import logging
 import os
 import os.path
-import sys
 
 logging.basicConfig()
 logger = logging.getLogger(__file__)
@@ -41,8 +39,6 @@ from openfold.utils.trace_utils import (
 
 from scripts.precompute_embeddings import EmbeddingGenerator
 from scripts.utils import add_data_args
-
-from precompute import make_dir
 
 # Index to amino acid dictionary
 # Largely arbitrary, but must stay consistent for any given converter
@@ -163,9 +159,6 @@ def train(epochs=50, batch_size=32,
             for i in range(len(tags)):
                 final_seqs[tags[i]] = aa_seqs[i]
                 
-            make_dir(final_seqs) # Generate FASTAs for embedding compuation
-            os.system("python scripts/precompute_embeddings.py FASTAs/ embeddings/") # Compute and save embeddings
-                
             ###################################
 #           PROGRAM IS KNOWN TO WORK UNTIL HERE
             ###################################
@@ -183,17 +176,8 @@ def train(epochs=50, batch_size=32,
                     #loss = rna_to_rna(out_prot, get_structure(structs[i]), tm_score)
 
             loss = torch.Tensor(np.mean(loss))
-            print(loss)
             loss.backward()
             optimizer.step()
-            
-            # Clean up generated FASTAs and embeddings
-            files = glob.glob('FASTAs/')
-            for f in files:
-                os.remove(f)
-            files = glob.glob('alignments/')
-            for f in files:
-                os.remove(f)
     
     torch.save(conv.state_dict(), save_path)
     
@@ -249,7 +233,7 @@ def predict(seq, save):
 
                 feature_dict = feature_dicts.get(tag, None)
                 if feature_dict is None:
-                    feature_dict = generate_feature_dict(
+                    feature_dict = generate_feature_dict( ## And this
                         tags,
                         seqs,
                         alignment_dir,
