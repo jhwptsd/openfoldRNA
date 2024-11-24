@@ -106,7 +106,7 @@ def get_structure(tag, path=struct_path):
     path = f"{path}\{component}\{macro_tag}\{tag}.cif"
     return path
 
-def train(args, epochs=50, batch_size=32, 
+def train(epochs=50, batch_size=32, 
           c=None, substitute=False, tm_score=False, 
           save_path="bin\converter.pt"):
     
