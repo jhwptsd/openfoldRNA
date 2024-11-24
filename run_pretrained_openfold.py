@@ -388,8 +388,10 @@ def main(args, seqs=None, save=False):
                 # Relax the prediction.
                 logger.info(f"Running relaxation on {unrelaxed_output_path}...")
                 if not save:
-                    return relax_protein(config, args.model_device, unrelaxed_protein, output_directory, output_name,
+                    out_prot = relax_protein(config, args.model_device, unrelaxed_protein, output_directory, output_name,
                                 args.cif_output, save=save)
+                    print(out_prot)
+                    return out_prot
                 else:
                     relax_protein(config, args.model_device, unrelaxed_protein, output_directory, output_name,
                                 args.cif_output, save=False)
@@ -411,7 +413,7 @@ if __name__ == "__main__":
         help="Path to directory containing FASTA files, one sequence per file"
     )
     parser.add_argument(
-        "template_mmcif_dir", type=str, default="\\"
+        "template_mmcif_dir", type=str,
     )
     parser.add_argument(
         "--use_precomputed_alignments", type=str, default=None,
