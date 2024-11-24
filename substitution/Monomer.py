@@ -18,8 +18,8 @@ class Monomer:
         else:
             return e[0]
         
-    def get_coords(self):
-        return self.coords
+    def get_atoms(self):
+        return self.atoms
     
     def add_name(self, name):
         self.name = name
@@ -47,78 +47,108 @@ class Monomer:
     
     def align_triangle_to_xy(self):
         """
-        Aligns the triangle formed by P, C1', and C4' atoms to the xy plane,
-        with the P-C4' vector aligned to the x-axis.
-        Returns a new aligned Monomer instance.
+        Aligns the triangle formed by C4', C1', and N1/N9 atoms to the positive xy plane.
         """
         out = copy.deepcopy(self)
+        # Get the coordinates of the three atoms forming the triangle
+        c4_coords = np.array(out.get_atom_coordinates('\"C4\'\"'))
+        c1_coords = np.array(out.get_atom_coordinates('\"C1\'\"'))
+        base_coords = np.array(out.get_atom_coordinates("P"))
+
+        if c4_coords is None or c1_coords is None or base_coords is None:
+            raise ValueError("Could not find required atoms for alignment")
+
+        # Create vectors from C4' to C1' and C4' to N1/N9
+        v1 = c1_coords - c4_coords
+        v2 = base_coords - c4_coords
+
+        # Calculate the normal vector of the triangle
+        normal = np.cross(v1, v2)
+        normal_magnitude = np.linalg.norm(normal)
         
-        try:
-            # Get the triangle vertices
-            c4_pos = np.array(out.atoms['"C4\'"'])
-            c1_pos = np.array(out.atoms['"C1\'"'])
-            translation = -np.array(out.atoms['P'])
-                
-            # Calculate triangle vectors
-            p_to_c4 = c4_pos + translation  # Vector from P to C4'
-            p_to_c1 = c1_pos + translation  # Vector from P to C1'
+        if normal_magnitude < 1e-10:
+            raise ValueError("Colinear points cannot form a triangle")
             
-            # Calculate normal to triangle
-            normal = np.cross(p_to_c4, p_to_c1)
-            normal = normal / np.linalg.norm(normal)
-            
-            # Calculate rotation to align normal with z-axis
-            z_axis = np.array([0, 0, 1])
-            angle = np.arccos(np.dot(normal, z_axis))
-            rotation_axis = np.cross(normal, z_axis)
-            
-            if np.linalg.norm(rotation_axis) > 1e-10:  # Check if vectors aren't parallel
-                rotation_axis = rotation_axis / np.linalg.norm(rotation_axis)
-                
-                # Create rotation matrix using Rodrigues' rotation formula
-                cos_theta = np.cos(angle)
-                sin_theta = np.sin(angle)
-                K = np.array([
-                    [0, -rotation_axis[2], rotation_axis[1]],
-                    [rotation_axis[2], 0, -rotation_axis[0]],
-                    [-rotation_axis[1], rotation_axis[0], 0]
+        normal = normal / normal_magnitude
+
+        # Calculate rotation matrix to align normal vector with z-axis
+        z_axis = np.array([0, 0, 1])
+        rotation_axis = np.cross(normal, z_axis)
+        rotation_axis_magnitude = np.linalg.norm(rotation_axis)
+
+        if rotation_axis_magnitude < 1e-10:
+            # If vectors are parallel, no rotation needed or rotate 180° if antiparallel
+            if normal[2] < 0:
+                # If normal points in negative z, rotate 180° around x-axis
+                rotation_matrix = np.array([
+                    [1, 0, 0],
+                    [0, -1, 0],
+                    [0, 0, -1]
                 ])
-                R = np.eye(3) + sin_theta * K + (1 - cos_theta) * np.dot(K, K)
-                
-                # Apply first rotation
-                for atom in out.atoms:
-                    out.atoms[atom] = np.dot(R, out.atoms[atom])
+            else:
+                return  # Already aligned correctly
+        else:
+            rotation_axis = rotation_axis / rotation_axis_magnitude
+            angle = np.arccos(np.clip(np.dot(normal, z_axis), -1.0, 1.0))
             
-            # Now align P-C4' with x-axis by rotating around z-axis
-            p_to_c4_new = out.atoms['"C4\'"']  # P is at origin
-            p_to_c4_xy = p_to_c4_new[:2]  # Project onto xy plane
-            p_to_c4_xy = p_to_c4_xy / np.linalg.norm(p_to_c4_xy)
-            
-            # Calculate angle with x-axis
-            x_axis = np.array([1, 0])
-            angle_xy = np.arccos(np.dot(p_to_c4_xy, x_axis))
-            
-            # Determine rotation direction
-            if p_to_c4_xy[1] < 0:
-                angle_xy = -angle_xy
-                
-            # Create and apply z-axis rotation matrix
-            cos_theta = np.cos(angle_xy)
-            sin_theta = np.sin(angle_xy)
-            R_z = np.array([
-                [cos_theta, -sin_theta, 0],
-                [sin_theta, cos_theta, 0],
-                [0, 0, 1]
+            # Create rotation matrix using Rodrigues' rotation formula
+            K = np.array([
+                [0, -rotation_axis[2], rotation_axis[1]],
+                [rotation_axis[2], 0, -rotation_axis[0]],
+                [-rotation_axis[1], rotation_axis[0], 0]
             ])
+            rotation_matrix = (np.eye(3) + np.sin(angle) * K + 
+                            (1 - np.cos(angle)) * np.matmul(K, K))
+
+        # Apply rotation to all atoms
+        for atom in out.atoms.keys():
+            coords = np.array(out.atoms[atom]) - c4_coords  # Center around C4'
+            rotated_coords = np.dot(rotation_matrix, coords)
+            atom.set_coordinates(rotated_coords + c4_coords)  # Move back to original position
+
+        # After first rotation, calculate the angle in xy plane between C4'-C1' vector and x-axis
+        c4_coords = np.array(out.get_atom_coordinates('C4\''))
+        c1_coords = np.array(out.get_atom_coordinates('C1\''))
+        v1_xy = c1_coords[:2] - c4_coords[:2]  # Only consider x and y components
+        v1_xy_magnitude = np.linalg.norm(v1_xy)
+        
+        if v1_xy_magnitude < 1e-10:
+            return  # Vector is vertical, no need for xy rotation
             
-            # Apply second rotation
+        cos_theta = np.clip(np.dot(v1_xy, [1, 0]) / v1_xy_magnitude, -1.0, 1.0)
+        theta = np.arccos(cos_theta)
+        
+        # Determine if we need to rotate clockwise or counterclockwise
+        if v1_xy[1] < 0:
+            theta = -theta
+
+        # Create rotation matrix around z-axis
+        rotation_matrix_z = np.array([
+            [np.cos(theta), -np.sin(theta), 0],
+            [np.sin(theta), np.cos(theta), 0],
+            [0, 0, 1]
+        ])
+
+        # Apply second rotation to all atoms
+        for atom in out.atoms:
+            coords = np.array(atom.get_coordinates()) - c4_coords
+            rotated_coords = np.dot(rotation_matrix_z, coords)
+            atom.set_coordinates(rotated_coords + c4_coords)
+
+        # Final check to ensure the molecule is in the positive xy plane
+        # If the base atom is in the negative x region, rotate 180° around y-axis
+        base_coords = np.array(out.get_atom_coordinates(out.base_atom))
+        if base_coords[0] - c4_coords[0] < 0:
+            rotation_matrix_y = np.array([
+                [-1, 0, 0],
+                [0, 1, 0],
+                [0, 0, -1]
+            ])
             for atom in out.atoms:
-                out.atoms[atom] = np.dot(R_z, out.atoms[atom])
-                
-            return out
-            
-        except KeyError as e:
-            raise KeyError(f"Required atom {e} not found in this monomer")
+                coords = np.array(atom.get_coordinates()) - c4_coords
+                rotated_coords = np.dot(rotation_matrix_y, coords)
+                atom.set_coordinates(rotated_coords + c4_coords)
+
 
     def align_to_normal(self, target_normal):
         """

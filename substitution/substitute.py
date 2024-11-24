@@ -1,4 +1,4 @@
-from parse_protein import *
+from substitution.parse_proteins import *
 import random
 
 def substitute(rna, protein):#, path_out):

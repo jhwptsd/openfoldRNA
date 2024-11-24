@@ -5,7 +5,8 @@ import os.path
 
 from Converter import Converter
 from run_pretrained_openfold import main
-from compare import protein_to_rna, rna_to_rna
+from protein_to_rna import protein_to_rna
+from rna_to_rna import rna_to_rna
 
 from parse_json import parse_json
 from scripts.utils import add_data_args
@@ -151,7 +152,7 @@ def train(args, epochs=50, batch_size=32,
                 else:
                     # LAYER 3: SUBSTITUTION
                     pass # May not be necessary - I'll begin testing without the substitution layer.
-                    loss = rna_to_rna(out_prot, get_structure(structs[i]), tm_score)
+                    #loss = rna_to_rna(out_prot, get_structure(structs[i]), tm_score)
 
             loss = torch.Tensor(np.mean(loss))
             loss.backward()
