@@ -168,7 +168,7 @@ if __name__=="__main__":
         help="Path to directory containing FASTA files, one sequence per file"
     )
     parser.add_argument(
-        "template_mmcif_dir", type=str, defaults="\\"
+        "template_mmcif_dir", type=str, default="\\"
     )
     parser.add_argument(
         "--use_precomputed_alignments", type=str, default=None,
