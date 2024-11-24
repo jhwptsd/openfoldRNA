@@ -166,7 +166,7 @@ def train(epochs=50, batch_size=32,
             # LAYER 2: FOLDING
             loss = np.array([])
             for i in range(len(final_seqs)):
-                out_prot = predict(list(final_seqs.values())[i], save=False)
+                out_prot = predict(final_seqs.values()[i], save=False)
                 
                 if not substitute:
                     loss = protein_to_rna(out_prot, structs[i], tm_score)
