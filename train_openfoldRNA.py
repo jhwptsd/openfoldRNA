@@ -164,11 +164,11 @@ def train(args, epochs=50, batch_size=32,
 if __name__=="__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "fasta_dir", type=str,
+        "fasta_dir", type=str, default="\\",
         help="Path to directory containing FASTA files, one sequence per file"
     )
     parser.add_argument(
-        "template_mmcif_dir", type=str,
+        "template_mmcif_dir", type=str, defaults="\\"
     )
     parser.add_argument(
         "--use_precomputed_alignments", type=str, default=None,
