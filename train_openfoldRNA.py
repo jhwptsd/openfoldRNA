@@ -156,16 +156,17 @@ def train(epochs=50, batch_size=32,
                 loss = np.array([])
                 for i in range(len(final_seqs)):
                     out_prot = None#main(args, final_seqs.values()[i], save=False) # Directly calling fn may not work
-                                                                            # Instead, I'll try out using cmds for it
-                    
+                                                                                   # Instead, I'll try out using cmds for it
+
                     proc = subprocess.Popen(['python', 'run_pretrained_openfold.py', 
-                                             f'--fasta_path FASTAs/{[final_seqs.keys()][i]}',
-                                             '--config_preset model_3',
+                                             'FASTAs',
+                                             'substitution/templates',
                                              '--use_single_seq_mode',
-                                             "--template_mmcif_dir /substitution/templates"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                                             '--config_preset', 'model_1',
+                                             '--openfold_checkpoint_path', 'openfold/resources/openfold_soloseq_params/seq_model_esm1b_noptm.pt'
+                                             ], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                     out, err = proc.communicate()
-                    out_prot = out
-                    print(out_prot)
+                    print(str(out))
                     if not substitute:
                         loss = protein_to_rna(out_prot, structs[i], tm_score)
                     else:
