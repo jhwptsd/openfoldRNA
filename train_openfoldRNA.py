@@ -185,13 +185,13 @@ def predict(seq, save):
         # Replicate main() from run_pretrained_openfold.py but without all of the nonsense
         if save:
             os.makedirs("\\folds", exist_ok=True)
-        config = model_config("model_3", 
+        config = model_config("model_1_ptm", 
                                 long_sequence_inference=False, 
                                 use_deepspeed_evoformer_attention=True)
         template_featurizer = templates.HhsearchHitFeaturizer(
             mmcif_dir="",
             max_template_date="9999-21-31",
-            max_hits=config.data.predict.max_templates,
+            max_hits=config.data.predict_templates,
             kalign_binary_path=None,
             release_dates_path=None,
             obsolete_pdbs_path=None,
